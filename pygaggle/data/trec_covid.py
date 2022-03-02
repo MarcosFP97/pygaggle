@@ -52,7 +52,7 @@ class TRECCovidDataset(BaseModel):
                 run[qid].append((doc_title, int(rank)))
         sorted_run = OrderedDict()
         for qid, doc_titles_ranks in run.items():
-            sorted(doc_titles_ranks, key=lambda x: x[1])
+            doc_titles_ranks.sort(key=lambda x: x[1])
             doc_titles = [doc_titles for doc_titles, _ in doc_titles_ranks]
             sorted_run[qid] = doc_titles
         return sorted_run
@@ -88,7 +88,7 @@ class TRECCovidDataset(BaseModel):
 
     def query_document_tuples(self):
         return [((ex.qid, ex.text, ex.relevant_candidates), perm_pas)
-                for ex in self.examples 
+                for ex in self.examples
                 for perm_pas in permutations(ex.candidates, r=1)]
 
     def to_relevance_examples(self,
@@ -110,7 +110,7 @@ class TRECCovidDataset(BaseModel):
                      for passage in passages][0])
             except ValueError as e:
                 logging.error(e)
-                logging.warning(f'Skipping passages')
+                logging.warning('Skipping passages')
                 continue
             example_map[qid][3].append(cands[0] in rel_cands)
         mean_stats = defaultdict(list)
@@ -118,20 +118,20 @@ class TRECCovidDataset(BaseModel):
         for ex in self.examples:
             int_rels = np.array(list(map(int, example_map[ex.qid][3])))
             p = int(int_rels.sum())
-            mean_stats['Random P@1'].append(np.mean(int_rels))
+            mean_stats['Expected P@1 for Random Ordering'].append(np.mean(int_rels))
             n = len(ex.candidates) - p
             N = len(ex.candidates)
             if len(ex.candidates) <= 1000:
-                mean_stats['Random R@1000'].append(1 if 1 in int_rels else 0)
+                mean_stats['Expected R@1000 for Random Ordering'].append(1 if 1 in int_rels else 0)
             numer = np.array([sp.comb(n, i) / (N - i) for i in range(0, n + 1) if i != N]) * p
             if n == N:
                 numer = np.append(numer, 0)
             denom = np.array([sp.comb(N, i) for i in range(0, n + 1)])
             rr = 1 / np.arange(1, n + 2)
             rmrr = np.sum(numer * rr / denom)
-            mean_stats['Random MRR'].append(rmrr)
+            mean_stats['Expected MRR for Random Ordering'].append(rmrr)
             rmrr10 = np.sum(numer[:10] * rr[:10] / denom[:10])
-            mean_stats['Random MRR@10'].append(rmrr10)
+            mean_stats['Expected MRR@10 for Random Ordering'].append(rmrr10)
             ex_index = len(ex.candidates)
             for rel_cand in ex.relevant_candidates:
                 if rel_cand in ex.candidates:
@@ -143,7 +143,7 @@ class TRECCovidDataset(BaseModel):
         for k, v in mean_stats.items():
             logging.info(f'{k}: {np.mean(v)}')
         rel = [RelevanceExample(Query(text=query_text, id=qid),
-                                list(map(lambda s: Text(s[1], s[2], dict(docid=s[0])), 
-                                          zip(cands, cands_text, title))),
-                                rel_cands) for qid, (query_text, cands, cands_text, rel_cands, title) in example_map.items()]
+                                list(map(lambda s: Text(s[1], dict(docid=s[0]), title=s[2]),
+                                         zip(cands, cands_text, title))), rel_cands)
+               for qid, (query_text, cands, cands_text, rel_cands, title) in example_map.items()]
         return rel

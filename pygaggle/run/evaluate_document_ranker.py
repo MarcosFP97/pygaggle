@@ -4,9 +4,7 @@ import logging
 
 from pydantic import BaseModel, validator
 from transformers import (AutoModel,
-                          AutoTokenizer,
-                          AutoModelForSequenceClassification,
-                          T5ForConditionalGeneration)
+                          AutoTokenizer)
 import torch
 
 from .args import ArgumentParserBuilder, opt
@@ -20,7 +18,6 @@ from pygaggle.rerank.transformer import (
 from pygaggle.rerank.random import RandomReranker
 from pygaggle.rerank.similarity import CosineSimilarityMatrixProvider
 from pygaggle.model import (SimpleBatchTokenizer,
-                            T5BatchTokenizer,
                             RerankerEvaluator,
                             metric_names,
                             MsMarcoWriter)
@@ -80,12 +77,11 @@ class DocumentRankingEvaluationOptions(BaseModel):
 
 
 def construct_t5(options: DocumentRankingEvaluationOptions) -> Reranker:
-    device = torch.device(options.device)
-    model = T5ForConditionalGeneration.from_pretrained(options.model,
-                                                       from_tf=options.from_tf).to(device).eval()
-    tokenizer = AutoTokenizer.from_pretrained(options.model_type)
-    tokenizer = T5BatchTokenizer(tokenizer, options.batch_size)
-    return MonoT5(model, tokenizer)
+    model = MonoT5.get_model(options.model,
+                             from_tf=options.from_tf,
+                             device=options.device)
+    tokenizer = MonoT5.get_tokenizer(options.model_type, batch_size=options.batch_size)
+    return MonoT5(model = model, tokenizer = tokenizer)
 
 
 def construct_transformer(options:
@@ -94,7 +90,7 @@ def construct_transformer(options:
     model = AutoModel.from_pretrained(options.model,
                                       from_tf=options.from_tf).to(device).eval()
     tokenizer = SimpleBatchTokenizer(AutoTokenizer.from_pretrained(
-        options.tokenizer_name),
+        options.tokenizer_name, use_fast=False,),
         options.batch_size)
     provider = CosineSimilarityMatrixProvider()
     return UnsupervisedTransformerReranker(model, tokenizer, provider)
@@ -102,10 +98,8 @@ def construct_transformer(options:
 
 def construct_seq_class_transformer(options: DocumentRankingEvaluationOptions
                                     ) -> Reranker:
-    model = AutoModelForSequenceClassification.from_pretrained(options.model, from_tf=options.from_tf)
-    device = torch.device(options.device)
-    model = model.to(device).eval()
-    tokenizer = AutoTokenizer.from_pretrained(options.tokenizer_name)
+    model = MonoBERT.get_model(options.model, from_tf=options.from_tf, device=options.device)
+    tokenizer = MonoBERT.get_tokenizer(options.tokenizer_name)
     return MonoBERT(model, tokenizer)
 
 
@@ -171,6 +165,7 @@ def main():
                                                  options.seg_stride,
                                                  options.aggregate_method):
         logging.info(f'{metric.name:<{width}}{metric.value:.5}')
+
 
 if __name__ == '__main__':
     main()
